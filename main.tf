@@ -22,6 +22,8 @@ resource "aws_rds_cluster" "main" {
   # E
   # referencing back the subnet_group to cluster
   db_subnet_group_name = aws_db_subnet_group.main.name
+
+  vpc_security_group_ids = [aws_security_group.main.id]
 }
 
 
@@ -44,3 +46,43 @@ resource "aws_rds_cluster_instance" "cluster_instances" {
   engine_version     = var.engine_version
 }
 
+#------------------------------------------------------------------------------
+shipping_route >>
+1. endpoint (create_parameters)
+2. security_group
+3. attach security_group back to rds
+4. iam policy (allowing app_subnet_shipping to access rds )
+5. schema update with (parameters, username:password)
+
+# elasticache_endpoint
+resource "aws_ssm_parameter" "rds_endpoint" {
+  name  = "${var.env}.rds.endpoint"
+  type  = "String"
+  value = aws_rds_cluster.main.endpoint
+}
+
+# Security_Group for rds
+resource "aws_security_group" "main" {
+  name        = "rds-${var.env}-sg"
+  description = "rds-${var.env}-sg"
+  vpc_id      = var.vpc_id
+
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description      = "RDS"
+    from_port        = 3306           # inside RDS we are opening port 3306 (Aurora/MySQL/MariaDB)
+    to_port          = 3306           # inside RDS we are opening port 3306 (Aurora/MySQL/MariaDB)
+    protocol         = "tcp"
+    cidr_blocks      = var.cidr_block     # here we have to specify which (app)subnet should access the docdb (not in terms of subnet_id, but in terms of cidr_block)
+  }
+
+  tags = {
+    merge (var.tags, Name = "rds-${var.env}-security-group")
+}
